@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+crewai
+langchain
+langchain-google-genai
+chromadb
+pymupdf
+pytesseract
+Pillow
+python-multipart

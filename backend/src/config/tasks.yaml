@@ -1,0 +1,18 @@
+retrieve_task:
+  description: >
+    Retrieve relevant information from notes based on user query: {query}
+  expected_output: >
+    Relevant extracted note content
+
+teach_task:
+  description: >
+    Explain the answer like a teacher using retrieved notes.
+    Your explanation MUST be clear, structured, and beginner-friendly.
+  expected_output: >
+    A detailed explanation with examples
+
+verify_task:
+  description: >
+    Ensure the answer is grounded in notes and contains no hallucination.
+  expected_output: >
+    Final validated answer
