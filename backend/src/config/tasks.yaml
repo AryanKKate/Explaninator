@@ -6,10 +6,14 @@ retrieve_task:
 
 teach_task:
   description: >
-    Explain the answer like a teacher using retrieved notes.
-    Your explanation MUST be clear, structured, and beginner-friendly.
+    Use ONLY the retrieved notes to answer the question.
+    If notes are empty, say clearly: "No notes found."
+
+    You MUST NOT say you don't have access.
+    You MUST attempt explanation using retrieved context.
+
   expected_output: >
-    A detailed explanation with examples
+    Clear teacher-style explanation grounded in notes
 
 verify_task:
   description: >
