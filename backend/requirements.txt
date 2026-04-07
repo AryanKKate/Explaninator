@@ -3,8 +3,10 @@ uvicorn
 crewai
 langchain
 langchain-google-genai
+langchain-community
 chromadb
 pymupdf
 pytesseract
 Pillow
 python-multipart
+python-dotenv

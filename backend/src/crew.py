@@ -1,57 +1,91 @@
-from crewai import Agent, Task, Crew, Process, LLM
-from src.tools.rag_tool import search_notes
+from typing import List
+
+from crewai import Agent, Crew, Process, Task
 from langchain_google_genai import ChatGoogleGenerativeAI
-llm = LLM(
-    model="gemini-2.5-flash",
-    temperature=0.3
+
+from src.config.settings import settings
+from src.tools.rag_tool import search_notes
+from src.tools.web_tool import web_research
+
+shared_llm = ChatGoogleGenerativeAI(
+    model=settings.llm_model,
+    temperature=0.2,
+    google_api_key=None,
 )
 
-retriever = Agent(
-    role="Retriever",
-    goal="Fetch relevant notes",
-    backstory="You are an expert researcher. You can navigate databases to extract exactly the right study notes needed.",
-    tools=[search_notes],
-    llm=llm
-)
 
-teacher = Agent(
-    role="Teacher",
-    goal="Explain clearly",
-    backstory="You are a compassionate, clear, and insightful teacher. You break down complex ideas so that a student easily understands them.",
-    llm=llm,
-    memory=True
-)
-
-verifier = Agent(
-    role="Verifier",
-    goal="Validate answers",
-    backstory="You are a meticulous fact-checker. You rigorously review explanations to ensure they are fully accurate and helpful.",
-    llm=llm
-)
-
-def run_crew(query):
-    retrieve = Task(
-        description=f"Find relevant notes for: {query}",
-        expected_output="A list of relevant notes or facts extracted from the database.",
-        agent=retriever
+def run_crew(query: str, conversation_history: List[dict], web_enabled: bool = False):
+    history_block = "\n".join(
+        [f"{m.get('role', 'user')}: {m.get('content', '')}" for m in conversation_history[-8:]]
     )
 
-    teach = Task(
-        description=f"Explain: {query}",
-        expected_output="A clear, easy-to-understand explanation of the queried topic.",
-        agent=teacher
+    retriever_tools = [search_notes]
+    if web_enabled:
+        retriever_tools.append(web_research)
+
+    retriever = Agent(
+        role="Retriever",
+        goal="Fetch only relevant note chunks that directly answer the student question.",
+        backstory="You are a disciplined retrieval specialist. You must call Search Notes first.",
+        llm=shared_llm,
+        tools=retriever_tools,
+        verbose=False,
     )
 
-    verify = Task(
-        description="Validate answer",
-        expected_output="The final, fact-checked answer ready to be shown to the user.",
-        agent=verifier
+    teacher = Agent(
+        role="Teacher",
+        goal="Explain concepts clearly like a patient tutor using only retrieved context.",
+        backstory="You teach beginners with structured and simple explanations.",
+        llm=shared_llm,
+        verbose=False,
+    )
+
+    verifier = Agent(
+        role="Verifier",
+        goal="Ensure every claim is grounded in retrieved notes and flag missing evidence.",
+        backstory="You are strict about hallucination prevention and source grounding.",
+        llm=shared_llm,
+        verbose=False,
+    )
+
+    retrieve_task = Task(
+        description=(
+            "Use Search Notes to retrieve note chunks for this question: "
+            f"'{query}'.\nConversation history:\n{history_block}\n"
+            "If no notes are found, return exactly: NO_CONTEXT_FOUND. "
+            "If web is enabled, optionally call Web Research after Search Notes for enrichment."
+        ),
+        expected_output="Relevant chunks from notes, or NO_CONTEXT_FOUND.",
+        agent=retriever,
+    )
+
+    teach_task = Task(
+        description=(
+            "Based on the retriever output, explain the answer in a beginner-friendly structure:"
+            " 1) direct answer, 2) short explanation, 3) key points. "
+            "If retriever returned NO_CONTEXT_FOUND, explain that no answer can be grounded in notes."
+        ),
+        expected_output="A clear teaching response grounded in retrieved content.",
+        agent=teacher,
+        context=[retrieve_task],
+    )
+
+    verify_task = Task(
+        description=(
+            "Review the teacher response and ensure it is grounded in retrieved notes. "
+            "Remove unsupported claims and return the final safe answer."
+        ),
+        expected_output="Final grounded answer suitable for user display.",
+        agent=verifier,
+        context=[retrieve_task, teach_task],
     )
 
     crew = Crew(
         agents=[retriever, teacher, verifier],
-        tasks=[retrieve, teach, verify],
-        process=Process.sequential
+        tasks=[retrieve_task, teach_task, verify_task],
+        process=Process.sequential,
+        verbose=False,
+        memory=True,
     )
 
     return crew.kickoff()

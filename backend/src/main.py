@@ -1,20 +1,16 @@
 import os
-from dotenv import load_dotenv
-load_dotenv()
-if "GOOGLE_API_KEY" in os.environ and "GEMINI_API_KEY" not in os.environ:
-    os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
+from pathlib import Path
+from typing import Dict, List, Literal
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from src.crew import run_crew
-from src.tools.rag_tool import insert_note
-import fitz  # PyMuPDF
-import chromadb
-from sentence_transformers import SentenceTransformer
-print("API KEY LOADED:", bool(os.getenv("GOOGLE_API_KEY")))
+from pydantic import BaseModel, Field
 
-app = FastAPI()
+from src.config.settings import settings
+from src.crew import run_crew
+from src.tools.ingestion import ingest_file
+
+app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,47 +20,82 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_session_memory: Dict[str, List[dict]] = {}
+SUPPORTED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".webp"}
+
+
 class AskRequest(BaseModel):
-    query: str
+    query: str = Field(..., min_length=2)
+    session_id: str = Field(default="default")
+    web_enabled: bool = Field(default=False)
 
-@app.post("/ask")
-async def ask(req: AskRequest):
-    response = run_crew(req.query)
-    # CrewAI tasks might return a string or object. Convert appropriately.
-    ans = response.raw if hasattr(response, "raw") else str(response)
-    return {"answer": ans}
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+class Message(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
 
-client = chromadb.Client()
-collection = client.get_or_create_collection("notes")
 
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "model": settings.llm_model}
+
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    file_path = f"uploads/{file.filename}"
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename in upload.")
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    ext = Path(file.filename).suffix.lower()
+    if ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ext}'. Supported: {sorted(SUPPORTED_EXTENSIONS)}",
+        )
 
-    # ✅ Extract text from PDF
-    text = ""
-    doc = fitz.open(file_path)
-    for page in doc:
-        text += page.get_text()
+    save_path = os.path.join(settings.upload_dir, file.filename)
 
-    # ✅ Chunk text
-    chunks = [text[i:i+500] for i in range(0, len(text), 500)]
+    try:
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    # ✅ Embed + store
-    embeddings = embedder.encode(chunks).tolist()
+        with open(save_path, "wb") as f:
+            f.write(contents)
 
-    collection.add(
-        documents=chunks,
-        embeddings=embeddings,
-        ids=[f"{file.filename}_{i}" for i in range(len(chunks))]
-    )
+        chunk_count = ingest_file(save_path, file.filename)
+        return {
+            "message": "File processed and indexed successfully.",
+            "file": file.filename,
+            "chunks_indexed": chunk_count,
+        }
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to process upload: {exc}") from exc
 
-    return {"message": "File processed and stored ✅"}
+
+@app.post("/ask")
+def ask_question(request: AskRequest):
+    history = _session_memory.get(request.session_id, [])
+    history.append({"role": "user", "content": request.query})
+
+    try:
+        response = run_crew(
+            query=request.query,
+            conversation_history=history,
+            web_enabled=request.web_enabled,
+        )
+        answer = response.raw if hasattr(response, "raw") else str(response)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to generate answer: {exc}") from exc
+
+    history.append({"role": "assistant", "content": answer})
+    _session_memory[request.session_id] = history[-20:]
+
+    return {
+        "answer": answer,
+        "session_id": request.session_id,
+        "history": [Message(**m).model_dump() for m in _session_memory[request.session_id]],
+    }
