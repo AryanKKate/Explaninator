@@ -1,16 +1,38 @@
-from crewai.tools import tool
+from typing import Dict, List
+
 import chromadb
+from crewai.tools import tool
+from src.config.settings import settings
+from src.tools.embeddings import embed_query
 
-import uuid
+_client = chromadb.PersistentClient(path=settings.chroma_path)
+_collection = _client.get_or_create_collection(name=settings.collection_name)
 
-client = chromadb.Client()
-collection = client.get_or_create_collection("notes")
-
-def insert_note(text: str):
-    collection.add(documents=[text], ids=[str(uuid.uuid4())])
 
 @tool("Search Notes")
 def search_notes(query: str) -> str:
-    """Useful to search through the user's stored study notes to find relevant information."""
-    results = collection.query(query_texts=[query], n_results=5)
-    return "\n".join(results["documents"][0])
+    """Search the indexed notes and return the most relevant chunks."""
+    payload = retrieve_chunks(query, settings.max_retrieval_chunks)
+    if not payload["chunks"]:
+        return "NO_CONTEXT_FOUND"
+    return "\n\n".join(payload["chunks"])
+
+
+def retrieve_chunks(query: str, k: int = 5) -> Dict[str, List[str]]:
+    query = query.strip()
+    if not query:
+        return {"chunks": [], "sources": []}
+
+    query_embedding = embed_query(query)
+    results = _collection.query(
+        query_embeddings=[query_embedding],
+        n_results=max(1, k),
+        include=["documents", "metadatas", "distances"],
+    )
+
+    documents = results.get("documents", [[]])[0] if results.get("documents") else []
+    metadatas = results.get("metadatas", [[]])[0] if results.get("metadatas") else []
+
+    sources = [m.get("source", "unknown") for m in metadatas] if metadatas else []
+
+    return {"chunks": documents or [], "sources": sources}

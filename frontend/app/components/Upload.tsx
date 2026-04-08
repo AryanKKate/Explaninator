@@ -2,24 +2,40 @@
 
 import { useState } from "react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
 export default function Upload() {
   const [status, setStatus] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
 
-  const handleUpload = async (e: any) => {
-    const file = e.target.files[0];
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    setStatus("Uploading...");
+    setIsUploading(true);
+    setStatus("Uploading and indexing notes...");
 
-    const formData = new FormData();
-    formData.append("file", file);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    await fetch("http://localhost:8000/upload", {
-      method: "POST",
-      body: formData,
-    });
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData,
+      });
 
-    setStatus("Indexed ✅");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail ?? "Upload failed.");
+      }
+
+      setStatus(`Indexed ✅ ${data.chunks_indexed} chunks from ${data.file}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unexpected upload error";
+      setStatus(`Upload failed: ${message}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -30,6 +46,8 @@ export default function Upload() {
         type="file"
         onChange={handleUpload}
         className="mb-2"
+        accept=".pdf,.png,.jpg,.jpeg,.bmp,.tiff,.webp"
+        disabled={isUploading}
       />
 
       <p className="text-sm text-muted">{status}</p>

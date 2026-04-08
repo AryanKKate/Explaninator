@@ -20,15 +20,21 @@ export default function Home() {
           <div className="bg-slate-900 p-4 rounded-lg flex-1">
             <h2 className="text-lg font-semibold mb-2">Instructions</h2>
             <p className="text-muted text-sm border-b border-slate-800 pb-2 mb-2">
-              1. Upload your study material.<br/>
-              2. Ask questions about it.<br/>
-              3. Our AI Crew will find the answers and explain them.
+              1. Upload your study material.
+              <br />
+              2. Ask questions about it.
+              <br />
+              3. AI Tutor answers using only your indexed notes.
             </p>
-            {webEnabled && <p className="text-accent text-sm text-center">Web searching is enabled</p>}
+            {webEnabled && (
+              <p className="text-accent text-sm text-center">
+                Web enhancement is enabled for optional extra context.
+              </p>
+            )}
           </div>
         </div>
         <div className="flex-1 bg-slate-900 rounded-lg overflow-hidden border border-slate-800">
-          <Chat />
+          <Chat webEnabled={webEnabled} />
         </div>
       </div>
     </div>
