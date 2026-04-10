@@ -5,6 +5,7 @@ langchain
 langchain-google-genai
 langchain-community
 chromadb
+litellm
 pymupdf
 pytesseract
 Pillow
