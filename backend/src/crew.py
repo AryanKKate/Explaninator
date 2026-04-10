@@ -1,16 +1,15 @@
 from typing import List
 
 from crewai import Agent, Crew, Process, Task
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 
 from src.config.settings import settings
 from src.tools.rag_tool import search_notes
 from src.tools.web_tool import web_research
 
-shared_llm = ChatGoogleGenerativeAI(
+shared_llm = ChatGroq(
     model=settings.llm_model,
     temperature=0.2,
-    google_api_key=None,
 )
 
 
