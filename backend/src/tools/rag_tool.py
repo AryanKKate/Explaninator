@@ -29,7 +29,9 @@ def _resolve_litellm_model(model_name: str) -> str:
     model_name = model_name.strip()
     if "/" in model_name:
         return model_name
-    return f"groq/{model_name}"
+    if model_name.startswith("gemini-"):
+        return f"gemini/{model_name}"
+    return model_name
 
 
 def _generate_hypothetical_answer(query: str) -> str:
