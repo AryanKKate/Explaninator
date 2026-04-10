@@ -4,9 +4,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-if "GOOGLE_API_KEY" in os.environ and "GEMINI_API_KEY" not in os.environ:
-    os.environ["GEMINI_API_KEY"] = os.environ["GOOGLE_API_KEY"]
-
 
 @dataclass(frozen=True)
 class Settings:
@@ -14,7 +11,7 @@ class Settings:
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
     chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
     collection_name: str = os.getenv("CHROMA_COLLECTION", "notes")
-    llm_model: str = os.getenv("LLM_MODELL", "gemini-1.5-flash")
+    llm_model: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "800"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
