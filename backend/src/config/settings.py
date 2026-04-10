@@ -14,7 +14,7 @@ class Settings:
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
     chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
     collection_name: str = os.getenv("CHROMA_COLLECTION", "notes")
-    llm_model: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    llm_model: str = os.getenv("LLM_MODELL", "gemini-1.5-flash")
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "800"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
