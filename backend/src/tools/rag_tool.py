@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 import chromadb
 from crewai.tools import tool
 from litellm import completion
+
 from src.config.settings import settings
 from src.tools.embeddings import embed_query
 
@@ -26,16 +27,18 @@ def search_notes(query: str) -> str:
 
 
 def _resolve_litellm_model(model_name: str) -> str:
-    model_name = model_name.strip()
-    if "/" in model_name:
-        return model_name
-    if model_name.startswith("gemini-"):
-        return f"gemini/{model_name}"
-    return model_name
+    normalized = model_name.strip()
+    if "/" in normalized:
+        return normalized
+    if normalized.startswith("gemini-"):
+        return f"vertex_ai/{normalized}"
+    if normalized.startswith("llama") or normalized.startswith("mixtral"):
+        return f"groq/{normalized}"
+    return normalized
 
 
 def _generate_hypothetical_answer(query: str) -> str:
-    model = _resolve_litellm_model(settings.llm_model)
+    model = _resolve_litellm_model(settings.litellm_model)
     response = completion(
         model=model,
         temperature=0.1,
@@ -67,7 +70,7 @@ def _parse_query_variants(raw: str) -> List[str]:
 
 
 def _generate_query_variants(query: str) -> List[str]:
-    model = _resolve_litellm_model(settings.llm_model)
+    model = _resolve_litellm_model(settings.litellm_model)
     response = completion(
         model=model,
         temperature=0.2,
