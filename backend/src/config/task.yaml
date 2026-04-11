@@ -1,0 +1,42 @@
+retrieve_task:
+  description: >
+    Use the vector retriever to answer this student question: "{query}".
+    Conversation history:
+    {history_block}
+
+    Retrieval protocol (must follow):
+    1) Decompose the user question into core concepts.
+    2) Generate at least 3 semantically different search queries (synonyms + alternate phrasing).
+    3) Run Search Notes for each query variant.
+    4) Merge, rerank by relevance, and deduplicate chunks.
+    5) Return only the best grounded chunks.
+
+    If no note chunks are relevant, return exactly: NO_CONTEXT_FOUND.
+    If web is enabled, Web Research can be used only as supplementary context after Search Notes.
+  expected_output: >
+    Relevant grounded chunks from notes, or NO_CONTEXT_FOUND.
+
+teach_task:
+  description: >
+    Teach the student using only the retriever context.
+
+    Required structure:
+    1) Direct answer in 1-2 lines.
+    2) Why this is correct (explicit reasoning grounded in evidence).
+    3) Step-by-step explanation.
+    4) Mini worked example or analogy.
+    5) Key takeaways + one common pitfall.
+
+    Never dump raw chunks verbatim. Synthesize into a clear tutor-style response.
+    If input is NO_CONTEXT_FOUND, say you cannot provide a grounded answer from notes.
+  expected_output: >
+    Tutor-style explanation with clear grounded reasoning.
+
+verify_task:
+  description: >
+    Validate factual grounding and pedagogy quality:
+    - Remove any claim not supported by retrieved evidence.
+    - Keep the final answer accurate, concise, and instructional.
+    - Ensure the required teaching structure is preserved.
+  expected_output: >
+    Final validated and grounded teaching answer.
