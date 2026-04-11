@@ -1,5 +1,7 @@
-from typing import List
+from pathlib import Path
+from typing import Any, Dict, List
 
+import yaml
 from crewai import Agent, Crew, Process, Task
 from langchain_groq import ChatGroq
 
@@ -7,10 +9,25 @@ from src.config.settings import settings
 from src.tools.rag_tool import search_notes
 from src.tools.web_tool import web_research
 
+_CONFIG_DIR = Path(__file__).resolve().parent / "config"
+
+
+def _load_yaml(file_name: str) -> Dict[str, Any]:
+    with (_CONFIG_DIR / file_name).open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+AGENT_CONFIG = _load_yaml("agents.yaml")
+TASK_CONFIG = _load_yaml("task.yaml")
+
 shared_llm = ChatGroq(
-    model=settings.llm_model,
+    model=settings.groq_model,
     temperature=0.2,
 )
+
+
+def _cfg(section: Dict[str, Any], key: str, field: str, fallback: str) -> str:
+    return str(section.get(key, {}).get(field, fallback)).strip()
 
 
 def run_crew(query: str, conversation_history: List[dict], web_enabled: bool = False):
@@ -23,81 +40,69 @@ def run_crew(query: str, conversation_history: List[dict], web_enabled: bool = F
         retriever_tools.append(web_research)
 
     retriever = Agent(
-        role="Retriever",
-        goal="Fetch only relevant note chunks that directly answer the student question.",
-        backstory=(
-            "You are a disciplined retrieval specialist. You must call Search Notes first and "
-            "run multiple semantic searches, not just one literal keyword search. For each "
-            "question, break it into concepts and issue at least 3 distinct query phrasings "
-            "that use synonyms, alternate wording, and domain-specific variants."
-        ),
+        role=_cfg(AGENT_CONFIG, "retriever", "role", "Retriever"),
+        goal=_cfg(AGENT_CONFIG, "retriever", "goal", "Retrieve relevant note chunks."),
+        backstory=_cfg(AGENT_CONFIG, "retriever", "backstory", "You are a retrieval expert."),
         llm=shared_llm,
         tools=retriever_tools,
         verbose=False,
     )
 
     teacher = Agent(
-        role="Teacher",
-        goal=(
-            "Teach the answer with clear reasoning, practical intuition, and beginner-friendly "
-            "structure using only retrieved context."
-        ),
-        backstory=(
-            "You are a patient expert tutor. You do not dump raw retrieved text. Instead, you "
-            "synthesize it into a guided explanation with steps, intuition, and a short example."
-        ),
+        role=_cfg(AGENT_CONFIG, "teacher", "role", "Teacher"),
+        goal=_cfg(AGENT_CONFIG, "teacher", "goal", "Teach clearly from retrieved notes."),
+        backstory=_cfg(AGENT_CONFIG, "teacher", "backstory", "You are a patient tutor."),
         llm=shared_llm,
         verbose=False,
     )
 
     verifier = Agent(
-        role="Verifier",
-        goal="Ensure every claim is grounded in retrieved notes and flag missing evidence.",
-        backstory="You are strict about hallucination prevention and source grounding.",
+        role=_cfg(AGENT_CONFIG, "verifier", "role", "Verifier"),
+        goal=_cfg(AGENT_CONFIG, "verifier", "goal", "Validate grounded answers."),
+        backstory=_cfg(
+            AGENT_CONFIG,
+            "verifier",
+            "backstory",
+            "You are strict about grounding and hallucination prevention.",
+        ),
         llm=shared_llm,
         verbose=False,
     )
 
     retrieve_task = Task(
-        description=(
-            "Use Search Notes to retrieve note chunks for this question: "
-            f"'{query}'.\nConversation history:\n{history_block}\n"
-            "You must do agentic multi-query retrieval:\n"
-            "1) Identify the underlying concepts in the user question.\n"
-            "2) Generate at least 3 materially different semantic search queries.\n"
-            "3) Call Search Notes multiple times (once per query variant).\n"
-            "4) Merge and deduplicate the best relevant chunks before returning.\n"
-            "Do not rely on a single exact-phrase query.\n"
-            "If no notes are found, return exactly: NO_CONTEXT_FOUND. "
-            "If web is enabled, optionally call Web Research after Search Notes for enrichment."
+        description=_cfg(TASK_CONFIG, "retrieve_task", "description", "Retrieve relevant context.").format(
+            query=query,
+            history_block=history_block,
         ),
-        expected_output="Relevant chunks from notes, or NO_CONTEXT_FOUND.",
+        expected_output=_cfg(
+            TASK_CONFIG,
+            "retrieve_task",
+            "expected_output",
+            "Relevant chunks from notes, or NO_CONTEXT_FOUND.",
+        ),
         agent=retriever,
     )
 
     teach_task = Task(
-        description=(
-            "Based on the retriever output, teach the concept like a real tutor.\n"
-            "Required structure:\n"
-            "1) Direct answer in 1-2 sentences.\n"
-            "2) Why this is the answer (reasoning grounded in retrieved notes).\n"
-            "3) Step-by-step breakdown.\n"
-            "4) Mini example or analogy.\n"
-            "5) Key takeaways and common mistake to avoid.\n"
-            "Do not copy raw chunks verbatim; synthesize and explain."
-            "If retriever returned NO_CONTEXT_FOUND, explain that no answer can be grounded in notes."
+        description=_cfg(TASK_CONFIG, "teach_task", "description", "Teach from retrieval output."),
+        expected_output=_cfg(
+            TASK_CONFIG,
+            "teach_task",
+            "expected_output",
+            "A clear grounded teaching response.",
         ),
-        expected_output="A clear teaching response grounded in retrieved content.",
         agent=teacher,
         context=[retrieve_task],
     )
 
     verify_task = Task(
-        description=(
-            "Review the teacher response and ensure it is grounded in retrieved notes. "
-            "Remove unsupported claims and preserve a clear teaching structure with reasoning."
+        description=_cfg(TASK_CONFIG, "verify_task", "description", "Validate final response."),
+        expected_output=_cfg(
+            TASK_CONFIG,
+            "verify_task",
+            "expected_output",
+            "Final grounded answer suitable for user display.",
         ),
-        expected_output="Final grounded answer suitable for user display.",
         agent=verifier,
         context=[retrieve_task, teach_task],
     )

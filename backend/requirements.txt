@@ -12,3 +12,4 @@ Pillow
 python-multipart
 python-dotenv
 sentence-transformers
+PyYAML

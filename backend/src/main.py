@@ -37,7 +37,7 @@ class Message(BaseModel):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "model": settings.llm_model}
+    return {"status": "ok", "model": settings.groq_model}
 
 
 @app.post("/upload")

@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -11,7 +12,8 @@ class Settings:
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
     chroma_path: str = os.getenv("CHROMA_PATH", "./chroma_db")
     collection_name: str = os.getenv("CHROMA_COLLECTION", "notes")
-    llm_model: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    litellm_model: str = os.getenv("LITELLM_MODEL", "groq/llama-3.3-70b-versatile")
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "800"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
